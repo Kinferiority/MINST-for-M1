@@ -1,37 +1,10 @@
 import torch
 import torchvision.transforms
-from matplotlib.pyplot import plot
-from torch import nn,optim
-from torch.utils.data import DataLoader
-from torchvision import datasets
-from matplotlib import pyplot as plt
-
-train_loss = list()
-test_loss = list()
-
-device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-# 下载数据
-train_data = datasets.MNIST(root="data", train=True, transform=torchvision.transforms.Compose([
-    torchvision.transforms.Resize(size=(32, 32)),
-    torchvision.transforms.ToTensor()
-]), download=True)
-test_data = datasets.MNIST(root="data", train=False, transform=torchvision.transforms.Compose([
-    torchvision.transforms.Resize(size=(32, 32)),
-    torchvision.transforms.ToTensor()
-]), download=True)
-# 加载数据
-batch_size = 64
-train_data_set = DataLoader(dataset=train_data, batch_size=batch_size, shuffle=True, drop_last=True)
-test_data_set = DataLoader(dataset=test_data, batch_size=batch_size, shuffle=True, drop_last=True)
-
-train_data_size = len(train_data)
-test_data_size = len(test_data)
-
-print(f"训练集长度：{train_data_size}")
-print(f"训练集长度：{test_data_size}")
+from PIL import Image
+from torch import nn
+import os
 
 
-# 创建网络模型
 class MyNet(nn.Module):
     def __init__(self):
         super().__init__()
@@ -50,61 +23,29 @@ class MyNet(nn.Module):
         return self.module(x)
 
 
-# 初始化网络
-mynet = MyNet()
-mynet = mynet.to(device)
+root_dir = "test_number"
+number_name = "test11.png"
+img_path = os.path.join(root_dir,number_name)
+img = Image.open(img_path)
+# img.show()
+# 将三通道图片转换成单通道图片
+img_1 = img.convert('1')
+trans_pose = torchvision.transforms.Compose([
+    torchvision.transforms.Resize(size=(32, 32)),
+    torchvision.transforms.ToTensor(),
+    torchvision.transforms.Lambda(lambda x: torch.reshape(x, (1, 1, 32, 32)))  # 在这里添加形状变换
+])
 
-# 定义损失函数和优化器
-loss_fn = nn.CrossEntropyLoss()
-loss_fn = loss_fn.to(device)
-lr = 0.01
-optimzier = optim.SGD(mynet.parameters(),lr=lr)
-epoch =25
-for i in range(epoch):
-    # 训练
-    mynet.train()
-    train_step = 0
-    for imgs,targets in train_data_set:
-        imgs = imgs.to(device)
-        targets = targets.to(device)
-        outputs = mynet(imgs)
-        loss = loss_fn(outputs,targets)
-        optimzier.zero_grad()
-        loss.backward()
-        optimzier.step()
-        train_step += 1
-        if train_step % 100 == 0:
-            # print(imgs.shape)
-            # print(outputs.shape)
-            print(f"第{train_step}次训练的loss为:{loss}")
-            train_loss.append(loss)
+img_1 = trans_pose(img_1)
+print(img_1.shape)
 
 
-    # 测试
-    accuarcy = 0
-    total_accuracy = 0
-    mynet.eval()
-    with torch.no_grad():
-        for j,(imgs,targets) in enumerate(test_data_set):
-            imgs = imgs.to(device)
-            targets = targets.to(device)
-            outputs = mynet(imgs)
-            loss = loss_fn(outputs,targets)
-            accuracy = (outputs.argmax(axis=1) == targets).sum()
-            total_accuracy += accuarcy
-            if j % 100 == 0:
-                test_loss.append(loss)
-    print(f"第{i+1}轮的准确率为{total_accuracy/test_data_size}")
-    # 保存模型
-    torch.save(mynet, f'MNIST_{i}_acc_{total_accuracy / test_data_size}.pth')
+mynet = torch.load('MNIST_24_acc_0.9843999743461609.pth', map_location=torch.device('cpu'))
 
-train_loss = [loss.item() for loss in train_loss]
-test_loss = [loss.item() for loss in test_loss]
+mynet.eval()
+with torch.no_grad():
+    output = mynet(img_1)
+    number = output.argmax(axis=1).item()
+    print(f'识别的数字是{number}')
 
-# 绘制训练和测试损失曲线
-plt.plot(train_loss, label='Training Loss')
-plt.plot(test_loss, label='Test Loss')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.legend()
-plt.show()
+# 该模型对于具有三通道的黑白图片的拟合效果较好，而对三通道的彩色图片拟合效果较差
